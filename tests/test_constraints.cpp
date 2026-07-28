@@ -6,7 +6,7 @@ TEST_CASE("Constraints - InitializationConstraint Behavior", "[constraints]") {
 
   // A variable not yet initialized acts as an empty set (the bottom element)
   // inside a fresh std::unordered_map lookup.
-  REQUIRE(state["x0"].getKind() == AnalyzedValue::Kind::Set);
+  REQUIRE(std::get<IV>(state["x0"]).getKind() == IV::Kind::Set);
 
   // Bind x0 = 42
   InitializationConstraint init_x0("x0", 42);
@@ -15,13 +15,13 @@ TEST_CASE("Constraints - InitializationConstraint Behavior", "[constraints]") {
     bool changed = init_x0.eval(state);
 
     REQUIRE(changed == true);
-    REQUIRE(state["x0"].getKind() == AnalyzedValue::Kind::Set);
+    REQUIRE(std::get<IV>(state["x0"]).getKind() == IV::Kind::Set);
 
     // Running a quick self-join test to prove 42 is tracked inside the set
-    AnalyzedValue expected;
+    IV expected;
     std::vector<int> vals = {42};
     expected.addConstant(vals);
-    REQUIRE(state["x0"] == expected);
+    REQUIRE(std::get<IV>(state["x0"]) == expected);
   }
 
   SECTION("Subsequent evaluations return false if the value hasn't changed") {
@@ -49,13 +49,13 @@ TEST_CASE("Constraints - PhiConstraint Behavior", "[constraints]") {
     bool changed = phi_x0.eval(state);
 
     REQUIRE(changed == true);
-    REQUIRE(state["x0"].getKind() == AnalyzedValue::Kind::Set);
+    REQUIRE(std::get<IV>(state["x0"]).getKind() == IV::Kind::Set);
 
     // Expect x0 to hold the union {3, 5}
-    AnalyzedValue expected;
+    IV expected;
     std::vector<int> vals = {3,5};
     expected.addConstant(vals);
-    REQUIRE(state["x0"] == expected);
+    REQUIRE(std::get<IV>(state["x0"]) == expected);
   }
 
   SECTION("Phi constraint forces collapse into StridedInterval if combined "
@@ -77,8 +77,8 @@ TEST_CASE("Constraints - PhiConstraint Behavior", "[constraints]") {
     PhiConstraint phi_overflow("phi_overflow", {"a", "b", "c", "d", "e"});
 
     phi_overflow.eval(state);
-    REQUIRE(state["phi_overflow"].getKind() ==
-            AnalyzedValue::Kind::StridedInterval);
+    REQUIRE(std::get<IV>(state["phi_overflow"]).getKind() ==
+            IV::Kind::StridedInterval);
   }
 }
 
@@ -98,14 +98,14 @@ TEST_CASE("Constraints - AddConstraint Pairwise Sets", "[constraints][add]") {
   // the test!
 
   // v1 = {2,3}
-  AnalyzedValue v1;
+  IV v1;
   std::vector<int> vals = {2,3};
   v1.addConstant(vals);
   state["v1"] = v1;
 
   // v2 = {10, 20}
   vals = {10,20};
-  AnalyzedValue v2;
+  IV v2;
   v2.addConstant(vals);
   state["v2"] = v2;
 
@@ -116,15 +116,15 @@ TEST_CASE("Constraints - AddConstraint Pairwise Sets", "[constraints][add]") {
     bool changed = add_v0.eval(state);
 
     REQUIRE(changed == true);
-    REQUIRE(state["v0"].getKind() == AnalyzedValue::Kind::Set);
+    REQUIRE(std::get<IV>(state["v0"]).getKind() == IV::Kind::Set);
 
     // Expected unique combinations: 2+10=12, 2+20=22, 3+10=13, 3+20=23
     // Sorted: {12, 13, 22, 23} (Total size 4, which is <= N=4)
-    AnalyzedValue expected;
+    IV expected;
     std::vector<int> vals = {12, 13, 22, 23};
     expected.addConstant(vals);
 
-    REQUIRE(state["v0"] == expected);
+    REQUIRE(std::get<IV>(state["v0"]) == expected);
   }
 }
 
@@ -132,12 +132,12 @@ TEST_CASE("Constraints - AddConstraint Overflow and Interval Math",
           "[constraints][add]") {
   AbstractState state;
 
-  AnalyzedValue v1;
+  IV v1;
   std::vector<int> vals = {1,2,3};
   v1.addConstant(vals);
   state["v1"] = v1;
 
-  AnalyzedValue v2;
+  IV v2;
   vals = {10,20};
   v2.addConstant(vals);
   state["v2"] = v2;
@@ -148,9 +148,9 @@ TEST_CASE("Constraints - AddConstraint Overflow and Interval Math",
 
     REQUIRE(add_v0.eval(state));
 
-    const auto &result = state["v0"];
+    const IV &result = std::get<IV>(state["v0"]);
 
-    REQUIRE(result.getKind() == AnalyzedValue::Kind::StridedInterval);
+    REQUIRE(result.getKind() == IV::Kind::StridedInterval);
 
     REQUIRE(result.getLower().getConstant() == 11);
 
@@ -165,7 +165,7 @@ TEST_CASE("Intersection with constant upper bound",
 
   AbstractState state;
 
-  AnalyzedValue v;
+  IV v;
   std::vector<int> vals = {1,5,10};
   v.addConstant(vals);
 
@@ -179,16 +179,16 @@ TEST_CASE("Intersection with constant upper bound",
 
   REQUIRE(C.eval(state));
 
-  REQUIRE(state["y"].getKind() == AnalyzedValue::Kind::Set);
+  REQUIRE(std::get<IV>(state["y"]).getKind() == IV::Kind::Set);
 
-  REQUIRE(state["y"].getValues()==std::set<int>{1,5});
+  REQUIRE(std::get<IV>(state["y"]).getValues()==std::set<int>{1,5});
 }
 
 TEST_CASE("Intersection narrows interval", "[constraints][intersect]") {
 
   AbstractState state;
 
-  AnalyzedValue x;
+  IV x;
 
   Bound low = Bound::constant(0);
 
@@ -206,15 +206,15 @@ TEST_CASE("Intersection narrows interval", "[constraints][intersect]") {
 
   REQUIRE(C.eval(state));
 
-  REQUIRE(state["y"].getLower().getConstant() == 10);
-  REQUIRE(state["y"].getUpper().getConstant() == 20);
+  REQUIRE(std::get<IV>(state["y"]).getLower().getConstant() == 10);
+  REQUIRE(std::get<IV>(state["y"]).getUpper().getConstant() == 20);
 }
 
 TEST_CASE("Growth phase ignores futures", "[constraints][intersect]") {
 
   AbstractState state;
 
-  AnalyzedValue x;
+  IV x;
   std::vector<int> vals = {1,5,10};
   x.addConstant(vals);
 
@@ -236,18 +236,18 @@ TEST_CASE("Narrowing recovers from MinusInfinity lower bound",
   AbstractState state;
 
   // Set up operand x = [0, 50]
-  AnalyzedValue x;
+  IV x;
   Bound zero = Bound::constant(0);
   Bound fifty = Bound::constant(50);
   x.setAsInterval(zero, fifty, 1);
   state["x"] = x;
 
   // Set up destination y old state = [-Infinity, 100]
-  AnalyzedValue y_old;
+  IV y_old;
   Bound minusInf = Bound::minusInfinity();
   Bound hundred = Bound::constant(100);
   y_old.setAsInterval(minusInf, hundred, 1);
-  state["y"] = y_old;
+  std::get<IV>(state["y"]) = y_old;
 
   // Constraint: y = x intersection [10, 20] -> eval(state) will yield [10, 20]
   Bound ten = Bound::constant(10);
@@ -261,23 +261,23 @@ TEST_CASE("Narrowing recovers from MinusInfinity lower bound",
   // Guard 1 updates 'lo' to 10, but because of the 'else if' ladder,
   // 'hi' retains oldY's upper bound (100) instead of falling through to eY's
   // upper bound (20)
-  REQUIRE(state["y"].getLower().getConstant() == 10);
-  REQUIRE(state["y"].getUpper().getConstant() == 20);
+  REQUIRE(std::get<IV>(state["y"]).getLower().getConstant() == 10);
+  REQUIRE(std::get<IV>(state["y"]).getUpper().getConstant() == 20);
 }
 
 TEST_CASE("Narrowing tightens a finite upper bound", "[constraints][narrow]") {
   AbstractState state;
 
   // Set up operand x = [0, 100]
-  AnalyzedValue x;
+  IV x;
   Bound zero = Bound::constant(0);
   Bound hundred = Bound::constant(100);
   x.setAsInterval(zero, hundred, 1);
   state["x"] = x;
 
   // Set up destination y old state = [0, 100]
-  AnalyzedValue y_old = x;
-  state["y"] = y_old;
+  IV y_old = x;
+  std::get<IV>(state["y"]) = y_old;
 
   // Constraint: y = x intersection [0, 50] -> eval(state) yields [0, 50]
   // Lower bounds match (0 == 0), but upper bound shrinks (50 < 100)
@@ -288,8 +288,8 @@ TEST_CASE("Narrowing tightens a finite upper bound", "[constraints][narrow]") {
   REQUIRE(C.narrow(state));
 
   // Lower bound stays 0, upper bound is narrowed to 50
-  REQUIRE(state["y"].getLower().getConstant() == 0);
-  REQUIRE(state["y"].getUpper().getConstant() == 50);
+  REQUIRE(std::get<IV>(state["y"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["y"]).getUpper().getConstant() == 50);
 }
 
 TEST_CASE("Narrowing reaches a fixed point and returns false",
@@ -297,14 +297,14 @@ TEST_CASE("Narrowing reaches a fixed point and returns false",
   AbstractState state;
 
   // Set up operand x = [10, 20]
-  AnalyzedValue x;
+  IV x;
   Bound ten = Bound::constant(10);
   Bound twenty = Bound::constant(20);
   x.setAsInterval(ten, twenty, 1);
   state["x"] = x;
 
   // Set up destination y old state = [10, 20]
-  state["y"] = x;
+  std::get<IV>(state["y"]) = x;
 
   // Constraint: y = x intersection [10, 20] -> eval(state) yields [10, 20]
   IntersectionConstraint C("y", "x", ten, twenty);
@@ -313,8 +313,8 @@ TEST_CASE("Narrowing reaches a fixed point and returns false",
   REQUIRE_FALSE(C.narrow(state));
 
   // Ensure state values are untouched
-  REQUIRE(state["y"].getLower().getConstant() == 10);
-  REQUIRE(state["y"].getUpper().getConstant() == 20);
+  REQUIRE(std::get<IV>(state["y"]).getLower().getConstant() == 10);
+  REQUIRE(std::get<IV>(state["y"]).getUpper().getConstant() == 20);
 }
 
 TEST_CASE("Resolve future lower bound",
@@ -323,7 +323,7 @@ TEST_CASE("Resolve future lower bound",
   AbstractState state;
 
   // x = [10, 20]
-  AnalyzedValue x;
+  IV x;
   Bound ten = Bound::constant(10);
 
   Bound twenty = Bound::constant(20);
@@ -345,7 +345,7 @@ TEST_CASE("Resolve future lower bound",
 
   AbstractState dummy;
 
-  AnalyzedValue z;
+  IV z;
   z.setAsInterval(
       Bound::constant(0),
       Bound::constant(30));
@@ -354,12 +354,12 @@ TEST_CASE("Resolve future lower bound",
 
   REQUIRE(resolved.eval(dummy));
 
-  AnalyzedValue expected;
+  IV expected;
   expected.setAsInterval(
       Bound::constant(13),
       Bound::constant(30));
 
-  REQUIRE(dummy["y"] == expected);
+  REQUIRE(std::get<IV>(dummy["y"]) == expected);
 }
 
 TEST_CASE("Resolve future upper bound",
@@ -368,7 +368,7 @@ TEST_CASE("Resolve future upper bound",
   AbstractState state;
 
   // x = [10, 20]
-  AnalyzedValue x;
+  IV x;
   Bound ten = Bound::constant(10);
 
   Bound twenty = Bound::constant(20);
@@ -390,7 +390,7 @@ TEST_CASE("Resolve future upper bound",
 
   AbstractState dummy;
 
-  AnalyzedValue z;
+  IV z;
   z.setAsInterval(
       Bound::constant(0),
       Bound::constant(30));
@@ -399,12 +399,12 @@ TEST_CASE("Resolve future upper bound",
 
   REQUIRE(resolved.eval(dummy));
 
-  AnalyzedValue expected;
+  IV expected;
   expected.setAsInterval(
       Bound::constant(0),
       Bound::constant(18));
 
-  REQUIRE(dummy["y"] == expected);
+  REQUIRE(std::get<IV>(dummy["y"]) == expected);
 }
 
 
@@ -412,13 +412,13 @@ TEST_CASE("Constraints - MultiplyConstraint Overflow",
           "[constraints][mul]") {
     AbstractState state;
 
-    AnalyzedValue a;
+    IV a;
     std::vector<int> vals = {1,2,3};
     a.addConstant(vals);
     state["a"] = a;
 
     vals = {10,20};
-    AnalyzedValue b;
+    IV b;
     b.addConstant(vals);
     state["b"] = b;
 
@@ -428,9 +428,9 @@ TEST_CASE("Constraints - MultiplyConstraint Overflow",
 
         REQUIRE(multiply.eval(state));
 
-        const auto &result = state["c"];
+        const IV result = std::get<IV>(state["c"]);
 
-        REQUIRE(result.getKind() == AnalyzedValue::Kind::StridedInterval);
+        REQUIRE(result.getKind() == IV::Kind::StridedInterval);
 
         REQUIRE(result.getLower().getConstant() == 10);
         REQUIRE(result.getUpper().getConstant() == 60);
@@ -443,13 +443,13 @@ TEST_CASE("Constraints - MultiplyConstraint Fixed Point",
           "[constraints][mul]") {
   AbstractState state;
 
-  AnalyzedValue a;
+  IV a;
   std::vector<int> vals = {6};
   a.addConstant(vals);
   state["a"] = a;
 
   vals = {7};
-  AnalyzedValue b;
+  IV b;
   b.addConstant(vals);
   state["b"] = b;
 
@@ -466,13 +466,13 @@ TEST_CASE("Constraints - MultiplyConstraint With Zero",
           "[constraints][mul]") {
   AbstractState state;
 
-  AnalyzedValue a;
+  IV a;
   std::vector<int> vals = {0};
   a.addConstant(vals);
   state["a"] = a;
 
   vals = {5};
-  AnalyzedValue b;
+  IV b;
   b.addConstant(vals);
   state["b"] = b;
 
@@ -481,23 +481,23 @@ TEST_CASE("Constraints - MultiplyConstraint With Zero",
   REQUIRE(multiply.eval(state));
 
   vals = {0};
-  AnalyzedValue expected;
+  IV expected;
   expected.addConstant(vals);
 
-  REQUIRE(state["c"] == expected);
+  REQUIRE(std::get<IV>(state["c"]) == expected);
 }
 
 TEST_CASE("Constraints - MultiplyConstraint Negative Values",
           "[constraints][mul]") {
   AbstractState state;
 
-  AnalyzedValue a;
+  IV a;
   std::vector<int> vals = {-2};
   a.addConstant(vals);
   state["a"] = a;
 
   vals = {4};
-  AnalyzedValue b;
+  IV b;
   b.addConstant(vals);
   state["b"] = b;
 
@@ -506,17 +506,17 @@ TEST_CASE("Constraints - MultiplyConstraint Negative Values",
   REQUIRE(multiply.eval(state));
 
   vals = {-8};
-  AnalyzedValue expected;
+  IV expected;
   expected.addConstant(vals);
 
-  REQUIRE(state["c"] == expected);
+  REQUIRE(std::get<IV>(state["c"]) == expected);
 }
 
 TEST_CASE("Constraints - LinearConstraint Set Behavior", "[constraints][linear]") {
   AbstractState state;
 
   // v1 = {1, 2, 3}
-  AnalyzedValue v1;
+  IV v1;
   std::vector<int> vals = {1,2,3};
   v1.addConstant(vals);
   state["v1"] = v1;
@@ -529,13 +529,13 @@ TEST_CASE("Constraints - LinearConstraint Set Behavior", "[constraints][linear]"
     bool changed = lin_v0.eval(state);
 
     REQUIRE(changed == true);
-    REQUIRE(state["v0"].getKind() == AnalyzedValue::Kind::Set);
+    REQUIRE(std::get<IV>(state["v0"]).getKind() == IV::Kind::Set);
 
-    AnalyzedValue expected;
+    IV expected;
     std::vector<int> vals = {7,9,11};
     expected.addConstant(vals);
 
-    REQUIRE(state["v0"] == expected);
+    REQUIRE(std::get<IV>(state["v0"]) == expected);
   }
 
   SECTION("Second evaluation returns false (Fixed Point)") {
@@ -548,7 +548,7 @@ TEST_CASE("Constraints - LinearConstraint Interval Behavior", "[constraints][lin
   AbstractState state;
 
   // v1 = [10, 20]
-  AnalyzedValue v1;
+  IV v1;
   Bound low = Bound::constant(10);
   Bound up = Bound::constant(20);
   v1.setAsInterval(low, up, 1);
@@ -562,8 +562,8 @@ TEST_CASE("Constraints - LinearConstraint Interval Behavior", "[constraints][lin
   SECTION("Correctly computes linear transformation on intervals") {
     REQUIRE(lin_v0.eval(state));
 
-    const auto& res = state["v0"];
-    REQUIRE(res.getKind() == AnalyzedValue::Kind::StridedInterval);
+    const auto& res = std::get<IV>(state["v0"]);
+    REQUIRE(res.getKind() == IV::Kind::StridedInterval);
     REQUIRE(res.getLower().getConstant() == 28);
     REQUIRE(res.getUpper().getConstant() == 58);
   }
@@ -573,7 +573,7 @@ TEST_CASE("Constraints - LinearConstraint Negative Multiplier", "[constraints][l
   AbstractState state;
 
   // v1 = [0, 10]
-  AnalyzedValue v1;
+  IV v1;
   v1.setAsInterval(Bound::constant(0), 
                    Bound::constant(10), 1);
   state["v1"] = v1;
@@ -587,7 +587,7 @@ TEST_CASE("Constraints - LinearConstraint Negative Multiplier", "[constraints][l
   SECTION("Handles negative multiplier in intervals") {
     REQUIRE(lin_v0.eval(state));
 
-    const auto& res = state["v0"];
+    const auto& res = std::get<IV>(state["v0"]);
     
     REQUIRE(res.getLower().getConstant() == -5);
     REQUIRE(res.getUpper().getConstant() == 5);
@@ -597,7 +597,7 @@ TEST_CASE("Constraints - LinearConstraint Negative Multiplier", "[constraints][l
 TEST_CASE("Constraints - LinearConstraint Identity", "[constraints][linear]") {
   AbstractState state;
 
-  AnalyzedValue v1;
+  IV v1;
   std::vector<int> vals = {42};
   v1.addConstant(vals);
   state["v1"] = v1;
@@ -606,7 +606,7 @@ TEST_CASE("Constraints - LinearConstraint Identity", "[constraints][linear]") {
 
   SECTION("Preserves value under identity operation") {
     identity.eval(state);
-    REQUIRE(state["v0"].getValues() == std::set<int>{42});
+    REQUIRE(std::get<IV>(state["v0"]).getValues() == std::set<int>{42});
   }
 }
 
@@ -615,216 +615,216 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
 
   SECTION("Multiplication: [0, 0] * [2, 3]") {
     // [0,0] * [2,3] -> [0,0]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::constant(0), Bound::constant(0), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(2), Bound::constant(3), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().getConstant() == 0);
     REQUIRE(result.getUpper().getConstant() == 0);
   }
 
   SECTION("Multiplication: [0, 0] * [-inf, +inf]") {
     // [0,0] * [-inf, +inf] ->   [0,0]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::constant(0), Bound::constant(0), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::minusInfinity(), Bound::plusInfinity(), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().getConstant() == 0);
     REQUIRE(result.getUpper().getConstant() == 0);
   }
 
   SECTION("Multiplication: [-inf, +inf] * [2, 4]") {
     // [-inf, +inf] * [x2,y2] -> [-inf, +inf]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::plusInfinity(), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(2), Bound::constant(4), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().isPlusInfinity());
   }
 
   SECTION("Multiplication: [2,4] * [-inf, +inf]") {
     // [x1,y1] * [-inf, +inf] -> [-inf, +inf]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::constant(2), Bound::constant(4), 1);
     state["a"] = a;
     
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::minusInfinity(), Bound::plusInfinity(), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().isPlusInfinity());
   }
 
   SECTION("Multiplication: [-inf, 2] * [1, 30]") {
     // [-inf, y1] * [x2,y2] ->   [-inf, y1*y2]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(1), Bound::constant(30), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().getConstant() == 60);
   }
 
   SECTION("Multiplication: [-inf, 2] * [0, 30]") {
     // [-inf, y1] * [0,y2] ->   [-inf, y1*y2]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(0), Bound::constant(30), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().getConstant() == 60);
   }
 
   SECTION("Multiplication: [-inf, -2] * [0, 30]") {
     // [-inf, -y1] * [0,y2] ->   [-inf, y1*y2]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(-2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(0), Bound::constant(30), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().getConstant() == 0);
   }
 
   SECTION("Multiplication: [-inf, 0] * [0, 30]") {
     // [-inf, 0] * [0,y2] ->   [-inf, y1*y2]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(0), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(0), Bound::constant(30), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().getConstant() == 0);
   }
 
   SECTION("Multiplication: [-inf, 2] * [-1, 30]") {
     // [-inf, y1] * [-x2,y2] ->  [-inf, +inf]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(-1), Bound::constant(30), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().isPlusInfinity());
   }
 
   SECTION("Multiplication: [-inf, 2] * [-1, 0]") {
     // [-inf, y1] * [-x2,0] ->   [y1*-x2, +inf]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(-1), Bound::constant(0), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().getConstant() == -2);
     REQUIRE(result.getUpper().isPlusInfinity());
   }
 
   SECTION("Multiplication: [-inf, -2] * [-1, 0]") {
     // [-inf, y1] * [-x2,0] ->   [y1*-x2, +inf]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(-2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(-1), Bound::constant(0), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().getConstant() == 0);
     REQUIRE(result.getUpper().isPlusInfinity());
   }
 
   SECTION("Multiplication: [-inf, 2] * [-1, 0]") {
     // [-inf, y1] * [-x2,0] ->   [y1*-x2, +inf]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(0), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(-1), Bound::constant(0), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().getConstant() == 0);
     REQUIRE(result.getUpper().isPlusInfinity());
   }
@@ -832,38 +832,38 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
 
   SECTION("Multiplication: [-inf, 2] * [1, 30]") {
     // [-inf, y1] * [x2,y2] ->   [-inf, y1*y2]
-    AnalyzedValue a;
+    IV a;
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
     state["a"] = a;
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(1), Bound::constant(30), 1);
     state["b"] = b;
 
     MultiplyConstraint multiply("c", "a", "b");
     multiply.eval(state);
 
-    const auto &result = state["c"];
+    const IV &result = std::get<IV>(state["c"]);
     REQUIRE(result.getLower().isMinusInfinity());
     REQUIRE(result.getUpper().getConstant() == 60);
   }
 
   SECTION("[-inf, y1] * [-x2, -y2] -> [y1 * -x2, +inf]") {
     // [-inf, 2] * [-10, -5] -> [2 * -10, +inf] -> [-20, +inf]
-    AnalyzedValue a; a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
-    AnalyzedValue b; b.setAsInterval(Bound::constant(-10), Bound::constant(-5), 1);
+    IV a; a.setAsInterval(Bound::minusInfinity(), Bound::constant(2), 1);
+    IV b; b.setAsInterval(Bound::constant(-10), Bound::constant(-5), 1);
     state["a"] = a; state["b"] = b;
     MultiplyConstraint m("c", "a", "b"); m.eval(state);
-    REQUIRE(state["c"].getLower().getConstant() == -20);
-    REQUIRE(state["c"].getUpper().isPlusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getLower().getConstant() == -20);
+    REQUIRE(std::get<IV>(state["c"]).getUpper().isPlusInfinity());
   }
 
   SECTION("[-inf, -y1] * [x2, y2] -> [-inf, -y1 * x2]") {
     // [-inf, -2] * [3, 5] -> [-inf, -6]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(-2), 1);
     
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(3), Bound::constant(5), 1);
     
     state["a"] = a; 
@@ -872,15 +872,15 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
 
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == -6);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == -6);
   }
 
   SECTION("[-inf, -y1] * [0, y2] -> [-inf, 0]") {
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(-2), 1);
 
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(0), Bound::constant(5), 1);
     
     state["a"] = a; 
@@ -888,16 +888,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == 0);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 0);
   }
 
   SECTION("[x1, +inf] * [x2, y2] -> [x1 * x2, +inf]") {
     // [2, +inf] * [3, 4] -> [6, +inf]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(2), Bound::plusInfinity(), 1);
 
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(3), Bound::constant(4), 1);
 
     state["a"] = a; 
@@ -906,15 +906,15 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
 
-    REQUIRE(state["c"].getLower().getConstant() == 6);
-    REQUIRE(state["c"].getUpper().isPlusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getLower().getConstant() == 6);
+    REQUIRE(std::get<IV>(state["c"]).getUpper().isPlusInfinity());
   }
 
   SECTION("[x1, +inf] * [0, y2] -> [0, +inf]") {
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(2), Bound::plusInfinity(), 1);
 
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(0), Bound::constant(4), 1);
 
     state["a"] = a; 
@@ -923,14 +923,14 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().getConstant() == 0);
-    REQUIRE(state["c"].getUpper().isPlusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getLower().getConstant() == 0);
+    REQUIRE(std::get<IV>(state["c"]).getUpper().isPlusInfinity());
   }
 
   SECTION("[x1, +inf] * [-x2, 0] -> [-inf, 0]") {
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(2), Bound::plusInfinity(), 1);
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(-5), Bound::constant(0), 1);
     
     state["a"] = a; 
@@ -939,16 +939,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == 0);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 0);
   }
 
   SECTION("[-x1, +inf] * [-x2, -y2] -> [-inf, x1 * x2]") {
     // [-2, +inf] * [-5, -3] -> [-inf, 10]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(-2), Bound::plusInfinity(), 1);
 
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(-5), Bound::constant(-3), 1);
 
     state["a"] = a; 
@@ -957,16 +957,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == 10);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 10);
   }
 
   SECTION("[-x1, +inf] * [0, y2] -> [-inf, x1 * y2]") {
     // [-2, +inf] * [0, 3] -> [-inf, -6]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(-2), Bound::plusInfinity(), 1);
 
-    AnalyzedValue b; 
+    IV b; 
     b.setAsInterval(Bound::constant(0), Bound::constant(3), 1);
 
     state["a"] = a; 
@@ -975,16 +975,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().getConstant() == -6);
-    REQUIRE(state["c"].getUpper().isPlusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getLower().getConstant() == -6);
+    REQUIRE(std::get<IV>(state["c"]).getUpper().isPlusInfinity());
   }
 
   SECTION("[-x1, +inf] * [-x2, 0] -> [-inf, x1 * x2]") {
     // [-2, +inf] * [-5, 0] -> [-inf, 10]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(-2), Bound::plusInfinity(), 1);
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(-5), Bound::constant(0), 1);
 
     state["a"] = a; 
@@ -993,16 +993,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == 10);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 10);
   }
 
   SECTION("[-x1, 0] * [-x2, +inf] -> [-inf, x1 * x2]") {
     // [-2, +inf] * [-5, 0] -> [-inf, 10]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::constant(-5), Bound::constant(0), 1);
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(-2), Bound::plusInfinity(), 1);
 
     state["a"] = a; 
@@ -1011,16 +1011,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == 10);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 10);
   }
 
   SECTION("[-inf, +inf] * [0, 0] -> [0, 0]") {
     // [-2, +inf] * [-5, 0] -> [-inf, 10]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::minusInfinity(), Bound::plusInfinity(), 1);
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(0), Bound::constant(0), 1);
 
     state["a"] = a; 
@@ -1029,16 +1029,16 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().getConstant() == 0);
-    REQUIRE(state["c"].getUpper().getConstant() == 0);
+    REQUIRE(std::get<IV>(state["c"]).getLower().getConstant() == 0);
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 0);
   }
 
   SECTION("[-inf, 0] * [0, +inf] -> [-inf, 0]") {
     // [-2, +inf] * [-5, 0] -> [-inf, 10]
-    AnalyzedValue a; 
+    IV a; 
     a.setAsInterval(Bound::minusInfinity(), Bound::constant(0), 1);
 
-    AnalyzedValue b;
+    IV b;
     b.setAsInterval(Bound::constant(0), Bound::plusInfinity(), 1);
 
     state["a"] = a; 
@@ -1047,8 +1047,8 @@ TEST_CASE("Constraints - MultiplyConstraint Infinite Bounds", "[constraints][mul
     MultiplyConstraint multiply("c", "a", "b"); 
     multiply.eval(state);
     
-    REQUIRE(state["c"].getLower().isMinusInfinity());
-    REQUIRE(state["c"].getUpper().getConstant() == 0);
+    REQUIRE(std::get<IV>(state["c"]).getLower().isMinusInfinity());
+    REQUIRE(std::get<IV>(state["c"]).getUpper().getConstant() == 0);
   }
 }
 
@@ -1056,14 +1056,14 @@ TEST_CASE("Constraints - SubConstraint Pairwise Sets", "[constraints][sub]") {
   AbstractState state;
 
   // v1 = {10, 20}
-  AnalyzedValue v1;
+  IV v1;
   std::vector<int> vals = {10, 20};
   v1.addConstant(vals);
   state["v1"] = v1;
 
   // v2 = {2, 3}
   vals = {2, 3};
-  AnalyzedValue v2;
+  IV v2;
   v2.addConstant(vals);
   state["v2"] = v2;
 
@@ -1074,15 +1074,15 @@ TEST_CASE("Constraints - SubConstraint Pairwise Sets", "[constraints][sub]") {
     bool changed = sub_v0.eval(state);
 
     REQUIRE(changed == true);
-    REQUIRE(state["v0"].getKind() == AnalyzedValue::Kind::Set);
+    REQUIRE(std::get<IV>(state["v0"]).getKind() == IV::Kind::Set);
 
     // Expected unique combinations: 10-2=8, 10-3=7, 20-2=18, 20-3=17
     // Sorted: {7, 8, 17, 18} (Total size 4, which is <= N=4)
-    AnalyzedValue expected;
+    IV expected;
     std::vector<int> expected_vals = {7, 8, 17, 18};
     expected.addConstant(expected_vals);
 
-    REQUIRE(state["v0"] == expected);
+    REQUIRE(std::get<IV>(state["v0"]) == expected);
   }
 }
 
@@ -1090,12 +1090,12 @@ TEST_CASE("Constraints - SubConstraint Overflow and Interval Math",
           "[constraints][sub]") {
   AbstractState state;
 
-  AnalyzedValue v1;
+  IV v1;
   std::vector<int> vals = {10, 20, 30};
   v1.addConstant(vals);
   state["v1"] = v1;
 
-  AnalyzedValue v2;
+  IV v2;
   vals = {1, 2};
   v2.addConstant(vals);
   state["v2"] = v2;
@@ -1105,14 +1105,133 @@ TEST_CASE("Constraints - SubConstraint Overflow and Interval Math",
   SECTION("Subtraction widens after the finite-set capacity is exceeded") {
     REQUIRE(sub_v0.eval(state));
 
-    const auto &result = state["v0"];
+    const IV &result = std::get<IV>(state["v0"]);
 
-    REQUIRE(result.getKind() == AnalyzedValue::Kind::StridedInterval);
+    REQUIRE(result.getKind() == IV::Kind::StridedInterval);
 
     REQUIRE(result.getLower().getConstant() == 8);
 
     REQUIRE(result.getUpper().getConstant() == 29);
 
     REQUIRE(result.getStride() == 1);
+  }
+}
+
+TEST_CASE("Constraints - EqualConstraint Behavior", "[constraints][equal]") {
+  AbstractState state;
+
+  SECTION("Definitely true for two identical singleton sets") {
+    IV p; p.addConstant({5});
+    IV q; q.addConstant({5});
+    state["p"] = p; state["q"] = q;
+
+    EqualConstraint eq("r", "p", "q");
+    bool changed = eq.eval(state);
+
+    REQUIRE(changed == true);
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{true});
+  }
+
+  SECTION("Definitely false for two different singleton sets") {
+    IV p; p.addConstant({5});
+    IV q; q.addConstant({9});
+    state["p"] = p; state["q"] = q;
+
+    EqualConstraint eq("r", "p", "q");
+    eq.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false});
+  }
+
+  SECTION("Unknown when the sets partially overlap in value") {
+    IV p; p.addConstant({1, 5});
+    IV q; q.addConstant({5, 9});
+    state["p"] = p; state["q"] = q;
+
+    EqualConstraint eq("r", "p", "q");
+    eq.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false, true});
+  }
+
+  SECTION("Definitely false for disjoint intervals") {
+    IV p; p.setAsInterval(Bound::constant(1), Bound::constant(5), 1);
+    IV q; q.setAsInterval(Bound::constant(10), Bound::constant(20), 1);
+    state["p"] = p; state["q"] = q;
+
+    EqualConstraint eq("r", "p", "q");
+    eq.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false});
+  }
+
+  SECTION("Unknown for overlapping intervals greater than 1 element") {
+    IV p; p.setAsInterval(Bound::constant(1), Bound::constant(10), 1);
+    IV q; q.setAsInterval(Bound::constant(7), Bound::constant(15), 1);
+    state["p"] = p; state["q"] = q;
+
+    EqualConstraint eq("r", "p", "q");
+    eq.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false, true});
+  }
+
+  SECTION("Unknown for equal intervals greater than 1 element") {
+    IV p; p.setAsInterval(Bound::constant(1), Bound::constant(5), 1);
+    IV q; q.setAsInterval(Bound::constant(1), Bound::constant(5), 1);
+    state["p"] = p; state["q"] = q;
+
+    EqualConstraint eq("r", "p", "q");
+    eq.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false, true});
+  }
+}
+
+TEST_CASE("Constraints - LogicalAndConstraint Behavior", "[constraints][logical]") {
+  AbstractState state;
+
+  SECTION("Short-circuits to false when one operand is definitely false") {
+    BV a; a.addConstant({false});
+    BV b; b.addConstant({false, true});
+    state["a"] = a; state["b"] = b;
+
+    LogicalAndConstraint land("r", "a", "b");
+    land.eval(state);
+    
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false});
+  }
+
+  SECTION("Definitely true when both operands are definitely true") {
+    BV a; a.addConstant({true});
+    BV b; b.addConstant({true});
+    state["a"] = a; state["b"] = b;
+
+    LogicalAndConstraint land("r", "a", "b");
+    land.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{true});
+  }
+
+  SECTION("Unknown when both operands are unknown") {
+    BV a; a.addConstant({false, true});
+    BV b; b.addConstant({false, true});
+    state["a"] = a; state["b"] = b;
+
+    LogicalAndConstraint land("r", "a", "b");
+    land.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false, true});
+  }
+
+  SECTION("Unknown when one operand is unknown and other operand is true") {
+    BV a; a.addConstant({false, true});
+    BV b; b.addConstant({true});
+    state["a"] = a; state["b"] = b;
+
+    LogicalAndConstraint land("r", "a", "b");
+    land.eval(state);
+
+    REQUIRE(std::get<BV>(state["r"]).getValues() == std::set<bool>{false, true});
   }
 }

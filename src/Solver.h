@@ -8,6 +8,7 @@
 #define SOLVER_H
 
 #include "IntValue.h"
+#include "BoolValue.h"
 #include "Constraint.h"
 #include <memory>
 #include <vector>

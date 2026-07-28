@@ -18,11 +18,11 @@ InitializationConstraint::InitializationConstraint(std::string var, int c)
     : Constraint(std::move(var)), constant(c) {}
 
 bool InitializationConstraint::eval(AbstractState& A) {
-    AnalyzedValue old_val = A[def];
+    IV old_val = std::get<IV>(A[def]);
 
     std::vector<int> vals = {constant};
-    A[def].addConstant(vals);
-    return old_val != A[def]; // Leverages your custom equality operator!
+    std::get<IV>(A[def]).addConstant(vals);
+    return old_val != std::get<IV>(A[def]); // Leverages your custom equality operator!
 }
 
 // --- PhiConstraint (v0 = phi(v1, v2, ...)) ---
@@ -30,15 +30,153 @@ PhiConstraint::PhiConstraint(std::string var, std::vector<std::string> ops)
     : Constraint(std::move(var)), operands(std::move(ops)) {}
 
 bool PhiConstraint::eval(AbstractState& A) {
-    AnalyzedValue old_val = A[def];
-    AnalyzedValue accumulated_join; // Starts at bottom element
+    if (std::holds_alternative<BV>(A[def])) {
+        BV old_val = std::get<BV>(A[def]);
+        BV accumulated_join; // Starts at bottom element
+    
+        for (const auto &op : operands) {
+          accumulated_join.join(std::get<BV>(A[op]));
+        }
+    
+        std::get<BV>(A[def]) = accumulated_join;
+        return old_val != accumulated_join;
+    } else {
+        IV old_val = std::get<IV>(A[def]);
+        IV accumulated_join; // Starts at bottom element
+    
+        for (const auto &op : operands) {
+          accumulated_join.join(std::get<IV>(A[op]));
+        }
+    
+        std::get<IV>(A[def]) = accumulated_join;
+        return old_val != accumulated_join;
+    }
+}
 
-  for (const auto &op : operands) {
-    accumulated_join.join(A[op]);
+// --- IntersectionConstraint (v0 = v1 intersection [low, up]) ---
+IntersectionConstraint::IntersectionConstraint(std::string dest,
+                                               std::string src,
+                                               IntersectionBound low,
+                                               IntersectionBound up)
+    : Constraint(std::move(dest)), operand(std::move(src)),
+      lower_bound(std::move(low)), upper_bound(std::move(up)) {}
+
+Bound
+IntersectionConstraint::resolveBound(const IntersectionBound &b,
+                                     const bool isLower,
+                                     const AbstractState &) const {
+
+  if (std::holds_alternative<Bound>(b))
+    return std::get<Bound>(b);
+
+  // Growth phase:
+  // ignore symbolic references
+  Bound result;
+
+  if (isLower)
+    result = Bound::minusInfinity();
+  else
+    result = Bound::plusInfinity();
+
+  return result;
+}
+
+IntersectionConstraint
+IntersectionConstraint::resolveFutures(const AbstractState &state) const {
+    auto resolve = [&](const IntersectionBound &bound,
+      bool isLower) -> IntersectionBound {
+    if (std::holds_alternative<Bound>(bound))
+      return bound;
+
+    const Future &future = std::get<Future>(bound);
+
+    auto it = state.find(future.target_variable);
+    assert(it != state.end());
+
+    IV futureVariable = std::get<IV>(it->second);
+
+    Bound result =
+      isLower ? futureVariable.getLower()
+      : futureVariable.getUpper();
+
+    if (result.isConstant())
+      result.setConstant(result.getConstant() + future.offset);
+
+    return result;
+  };
+
+  return IntersectionConstraint(
+      def,
+      operand,
+      resolve(lower_bound, true),
+      resolve(upper_bound, false));
+}
+
+bool IntersectionConstraint::eval(AbstractState &A) {
+
+    IV oldValue = std::get<IV>(A[def]);
+    const IV& src = std::get<IV>(A[operand]);
+
+  // Bottom stays bottom.
+  if (src.getKind() == IV::Kind::Set && src.getValues().empty()) {
+    return false;
   }
 
-    A[def] = accumulated_join;
-    return old_val != accumulated_join;
+  auto low = resolveBound(lower_bound, true, A);
+  auto up = resolveBound(upper_bound, false, A);
+
+  // AnalyzedValue result;
+
+  // Source is a finite set.
+  if (src.getKind() == IV::Kind::Set) {
+
+    std::vector<int> vals;
+    for (int v : src.getValues()) {
+      bool keep = true;
+      if (low.isConstant())
+        keep &= (v >= low.getConstant());
+      if (up.isConstant())
+        keep &= (v <= up.getConstant());
+      if (keep)
+        vals.emplace_back(v);
+    }
+
+    if (!vals.empty())
+      std::get<IV>(A[def]).addConstant(vals);
+  }
+
+  // Source is already an interval.
+  else {
+    auto lower = src.getLower();
+    auto upper = src.getUpper();
+
+    // max(lower, low)
+    if (low.isConstant()) {
+      if (lower.isMinusInfinity())
+        lower = low;
+      else if (lower.isConstant())
+        lower.setConstant(std::max(lower.getConstant(), low.getConstant()));
+    }
+
+    // min(upper, up)
+    if (up.isConstant()) {
+      if (upper.isPlusInfinity())
+        upper = up;
+      else if (upper.isConstant())
+        upper.setConstant(std::min(upper.getConstant(), up.getConstant()));
+    }
+
+    // Empty interval?
+    if (lower.isConstant() &&
+        upper.isConstant() &&
+        lower.getConstant() > upper.getConstant()) {
+      // Leave result as bottom.
+    } else {
+      std::get<IV>(A[def]).setAsInterval(lower, upper, src.getStride());
+    }
+  }
+
+    return oldValue != std::get<IV>(A[def]);
 }
 
 // --- ArithmeticConstraint Base ---
@@ -47,21 +185,21 @@ ArithmeticConstraint::ArithmeticConstraint(std::string dest, std::string lhs,
     : Constraint(std::move(dest)), op1(std::move(lhs)), op2(std::move(rhs)) {}
 
 bool AddConstraint::eval(AbstractState& A) {
-    AnalyzedValue old_val = A[def];
+    IV old_val = std::get<IV>(A[def]);
     
-    const AnalyzedValue &lhs = A[op1];
-    const AnalyzedValue &rhs = A[op2];
+    const IV &lhs = std::get<IV>(A[op1]);
+    const IV &rhs = std::get<IV>(A[op2]);
     
     // AnalyzedValue result; // Starts at bottom (empty set)
 
     // Exact evaluation: finite set × finite set
-    if (lhs.getKind() == AnalyzedValue::Kind::Set &&
-        rhs.getKind() == AnalyzedValue::Kind::Set) {
+    if (lhs.getKind() == IV::Kind::Set &&
+        rhs.getKind() == IV::Kind::Set) {
 
         // Bottom propagates.
         if (lhs.getValues().empty() || rhs.getValues().empty()) {
-            A[def].setAsBottom();
-            return old_val != A[def];
+            std::get<IV>(A[def]).setAsBottom();
+            return old_val != std::get<IV>(A[def]);
         }
 
         std::vector<int> consts;
@@ -72,21 +210,21 @@ bool AddConstraint::eval(AbstractState& A) {
             }
         }
 
-        A[def].addConstant(consts);
+        std::get<IV>(A[def]).addConstant(consts);
 
-    return old_val != A[def];
+    return old_val != std::get<IV>(A[def]);
   }
 
   // Otherwise treat every operand as a strided interval.
-  auto getLower = [](const AnalyzedValue &v) -> Bound {
-    if (v.getKind() == AnalyzedValue::Kind::Set) {
+  auto getLower = [](const IV &v) -> Bound {
+    if (v.getKind() == IV::Kind::Set) {
       return Bound::constant(*v.getValues().begin());
     }
     return v.getLower();
   };
 
-  auto getUpper = [](const AnalyzedValue &v) -> Bound {
-    if (v.getKind() == AnalyzedValue::Kind::Set) {
+  auto getUpper = [](const IV &v) -> Bound {
+    if (v.getKind() == IV::Kind::Set) {
       if (v.getValues().empty())
         return Bound::constant(*v.getValues().begin());
               
@@ -121,157 +259,45 @@ bool AddConstraint::eval(AbstractState& A) {
   auto upper = addUpper(getUpper(lhs), getUpper(rhs));
 
   unsigned s1 =
-      (lhs.getKind() == AnalyzedValue::Kind::StridedInterval)
+      (lhs.getKind() == IV::Kind::StridedInterval)
           ? lhs.getStride()
           : 1;
 
   unsigned s2 =
-      (rhs.getKind() == AnalyzedValue::Kind::StridedInterval)
+      (rhs.getKind() == IV::Kind::StridedInterval)
           ? rhs.getStride()
           : 1;
 
-  A[def].setAsInterval(lower, upper, std::gcd(s1, s2));
+  std::get<IV>(A[def]).setAsInterval(lower, upper, std::gcd(s1, s2));
 
-  return old_val != A[def];
+  return old_val != std::get<IV>(A[def]);
 }
 
-// --- IntersectionConstraint (v0 = v1 intersection [low, up]) ---
-IntersectionConstraint::IntersectionConstraint(std::string dest,
-                                               std::string src,
-                                               IntersectionBound low,
-                                               IntersectionBound up)
-    : Constraint(std::move(dest)), operand(std::move(src)),
-      lower_bound(std::move(low)), upper_bound(std::move(up)) {}
+bool SubConstraint::eval(AbstractState& A) {
+  IV av;
 
-Bound
-IntersectionConstraint::resolveBound(const IntersectionBound &b,
-                                     const bool isLower,
-                                     const AbstractState &) const {
+  std::vector<int> values;
+  for(int value : std::get<IV>(A[op2]).getValues()) values.push_back(value*(-1));
+  av.addConstant(values);
+  A[op2] = std::move(av);
 
-  if (std::holds_alternative<Bound>(b))
-    return std::get<Bound>(b);
-
-  // Growth phase:
-  // ignore symbolic references
-  Bound result;
-
-  if (isLower)
-    result = Bound::minusInfinity();
-  else
-    result = Bound::plusInfinity();
-
-  return result;
-}
-
-IntersectionConstraint
-IntersectionConstraint::resolveFutures(const AbstractState &state) const {
-  auto resolve = [&](const IntersectionBound &bound,
-      bool isLower) -> IntersectionBound {
-    if (std::holds_alternative<Bound>(bound))
-      return bound;
-
-    const Future &future = std::get<Future>(bound);
-
-    auto it = state.find(future.target_variable);
-    assert(it != state.end());
-
-    Bound result =
-      isLower ? it->second.getLower()
-      : it->second.getUpper();
-
-    if (result.isConstant())
-      result.setConstant(result.getConstant() + future.offset);
-
-    return result;
-  };
-
-  return IntersectionConstraint(
-      def,
-      operand,
-      resolve(lower_bound, true),
-      resolve(upper_bound, false));
-}
-
-bool IntersectionConstraint::eval(AbstractState &A) {
-
-    AnalyzedValue oldValue = A[def];
-    const AnalyzedValue& src = A[operand];
-
-  // Bottom stays bottom.
-  if (src.getKind() == AnalyzedValue::Kind::Set && src.getValues().empty()) {
-    return false;
-  }
-
-  auto low = resolveBound(lower_bound, true, A);
-  auto up = resolveBound(upper_bound, false, A);
-
-  // AnalyzedValue result;
-
-  // Source is a finite set.
-  if (src.getKind() == AnalyzedValue::Kind::Set) {
-
-    std::vector<int> vals;
-    for (int v : src.getValues()) {
-      bool keep = true;
-      if (low.isConstant())
-        keep &= (v >= low.getConstant());
-      if (up.isConstant())
-        keep &= (v <= up.getConstant());
-      if (keep)
-        vals.emplace_back(v);
-    }
-
-    if (!vals.empty())
-      A[def].addConstant(vals);
-  }
-
-  // Source is already an interval.
-  else {
-    auto lower = src.getLower();
-    auto upper = src.getUpper();
-
-    // max(lower, low)
-    if (low.isConstant()) {
-      if (lower.isMinusInfinity())
-        lower = low;
-      else if (lower.isConstant())
-        lower.setConstant(std::max(lower.getConstant(), low.getConstant()));
-    }
-
-    // min(upper, up)
-    if (up.isConstant()) {
-      if (upper.isPlusInfinity())
-        upper = up;
-      else if (upper.isConstant())
-        upper.setConstant(std::min(upper.getConstant(), up.getConstant()));
-    }
-
-    // Empty interval?
-    if (lower.isConstant() &&
-        upper.isConstant() &&
-        lower.getConstant() > upper.getConstant()) {
-      // Leave result as bottom.
-    } else {
-      A[def].setAsInterval(lower, upper, src.getStride());
-    }
-  }
-
-    return oldValue != A[def];
+  AddConstraint add(def,op1, op2);
+  return add.eval(A);
 }
 
 bool MultiplyConstraint::eval(AbstractState &A)
 {
-  AnalyzedValue old = A[this->def];
+  IV old = std::get<IV>(A[this->def]);
 
-  AnalyzedValue lhs = A[this->op1];
-  AnalyzedValue rhs = A[this->op2];
+  IV lhs = std::get<IV>(A[this->op1]);
+  IV rhs = std::get<IV>(A[this->op2]);
 
-  AnalyzedValue result;
+  IV result;
 
-  if(lhs.getKind() == AnalyzedValue::Kind::Set && rhs.getKind() == AnalyzedValue::Kind::Set)
+  if(lhs.getKind() == IV::Kind::Set && rhs.getKind() == IV::Kind::Set)
   {
     if (lhs.getValues().empty() || rhs.getValues().empty()) {
-      A[def] = result;
+      std::get<IV>(A[def]) = result;
       return old != result;
     }
 
@@ -285,15 +311,15 @@ bool MultiplyConstraint::eval(AbstractState &A)
   } else {
 
     // Otherwise treat every operand as a strided interval.
-    auto getLower = [](const AnalyzedValue &v) -> Bound {
-      if (v.getKind() == AnalyzedValue::Kind::Set) {
+    auto getLower = [](const IV &v) -> Bound {
+      if (v.getKind() == IV::Kind::Set) {
         return Bound::constant(*v.getValues().begin());
       }
       return v.getLower();
     };
 
-    auto getUpper = [](const AnalyzedValue &v) -> Bound {
-      if (v.getKind() == AnalyzedValue::Kind::Set) {
+    auto getUpper = [](const IV &v) -> Bound {
+      if (v.getKind() == IV::Kind::Set) {
         if (v.getValues().empty())
           return Bound::constant(*v.getValues().begin());
                 
@@ -359,12 +385,12 @@ bool MultiplyConstraint::eval(AbstractState &A)
 
 bool LinearConstraint::eval(AbstractState &A)
 {
-  AnalyzedValue old = A[this->def];
-  AnalyzedValue src = A[this->operand];
+  IV old = std::get<IV>(A[this->def]);
+  IV src = std::get<IV>(A[this->operand]);
 
-  AnalyzedValue result;
+  IV result;
 
-  if(src.getKind() == AnalyzedValue::Kind::Set)
+  if(src.getKind() == IV::Kind::Set)
   {
     std::vector<int> consts;
     for (int v : src.getValues()) {
@@ -408,14 +434,80 @@ bool LinearConstraint::eval(AbstractState &A)
   return old != result;
 }
 
-bool SubConstraint::eval(AbstractState& A) {
-  AnalyzedValue av;
+// --- InitializationConstraint (v = c) ---
+InitializationBoolConstraint::InitializationBoolConstraint(std::string var, bool c)
+    : Constraint(std::move(var)), constant(c) {}
 
-  std::vector<int> values;
-  for(int value : A[op2].getValues()) values.push_back(value*(-1));
-  av.addConstant(values);
-  A[op2] = std::move(av);
+bool InitializationBoolConstraint::eval(AbstractState& A) {
+    BV old_val = std::get<BV>(A[def]);
 
-  AddConstraint add(def,op1, op2);
-  return add.eval(A);
+    std::vector<bool> vals = {constant};
+    std::get<BV>(A[def]).addConstant(vals);
+    return old_val != std::get<BV>(A[def]); // Leverages your custom equality operator!
+}
+
+// --- EqualConstraint (v0 = v1 == v2) ---
+bool EqualConstraint::eval(AbstractState& A) {
+  // Emplace a BoolValue if def is undefined in the Abstract State
+  A.try_emplace(def, BV());
+
+  BV old_val = std::get<BV>(A[def]);
+  const IV &lhs = std::get<IV>(A[op1]);
+  const IV &rhs = std::get<IV>(A[op2]);
+
+
+  std::vector<bool> vals;
+  if (lhs.getKind() == IV::Kind::Set && rhs.getKind() == IV::Kind::Set) {
+    std::set<int> aux;
+
+    // If the intersection is not empty, then v1 == v2 can be true
+    std::set_intersection(lhs.getValues().begin(), lhs.getValues().end(),
+                  rhs.getValues().begin(), rhs.getValues().end(),
+                  std::inserter(aux, aux.begin()));
+
+    if (!aux.empty()) vals.push_back(true);
+
+    aux.clear();
+    // If the difference is not empty, then v1 == v2 can be false
+    std::set_difference(lhs.getValues().begin(), lhs.getValues().end(),
+                  rhs.getValues().begin(), rhs.getValues().end(),
+                  std::inserter(aux, aux.begin()));
+    
+    if (!aux.empty()) vals.push_back(false);
+  } else if (lhs == rhs) {
+    vals.push_back(true);
+    if (lhs.getLower() != lhs.getUpper())
+      vals.push_back(false);
+  } else if (lhs < rhs || lhs > rhs) {
+    vals.push_back(false);
+  } else {
+    vals.push_back(true);
+    vals.push_back(false);
+  }
+  std::get<BV>(A[def]).addConstant(vals);
+  return old_val != std::get<BV>(A[def]);
+}
+
+// --- LogicalAndConstraint (v0 = v1 && v2) ---
+bool LogicalAndConstraint::eval(AbstractState& A) {
+  // Emplace a BoolValue if def is undefined in the Abstract State
+  A.try_emplace(def, BV());
+  
+  BV old_val = std::get<BV>(A[def]);
+  const BV &lhs = std::get<BV>(A[op1]);
+  const BV &rhs = std::get<BV>(A[op2]);
+
+  std::vector<bool> vals;
+
+  // If v1 or v2 can be false, then v0 can be false
+  if (lhs.getValues().count(false) || rhs.getValues().count(false))
+    vals.push_back(false);
+  
+  // If v1 and v2 can be true, then v0 can be true
+  if (lhs.getValues().count(true) && rhs.getValues().count(true))
+    vals.push_back(true);
+
+  std::get<BV>(A[def]).addConstant(vals);
+
+  return old_val != std::get<BV>(A[def]);
 }

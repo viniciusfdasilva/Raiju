@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Executable for the main static analyzer tool
 add_executable(lattice_analyzer
     src/main.cpp
+    src/BoolValue.cpp
     src/Constraint.cpp
     src/Solver.cpp
     src/Graph.cpp
@@ -38,6 +39,7 @@ add_executable(analyzer_tests
     tests/test_int_value.cpp
     tests/test_constraints.cpp
     tests/test_solver.cpp
+    src/BoolValue.cpp
     src/Constraint.cpp
     src/Solver.cpp
     src/Graph.cpp

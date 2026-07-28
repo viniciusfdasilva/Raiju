@@ -217,5 +217,3 @@ void IntValue<N>::join(const IntValue<N> &other) {
     }
   }
 }
-
-using AnalyzedValue = IntValue<4>;

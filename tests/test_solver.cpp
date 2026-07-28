@@ -48,21 +48,21 @@ TEST_CASE("Solver growthAnalysis loops to positive infinity on feedback loop",
   // 5. Verify the expected abstract state limits before narrowing corrections
 
   // k0 should remain exactly 0
-  REQUIRE(state["k0"].getLower().getConstant() == 0);
-  REQUIRE(state["k0"].getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getUpper().getConstant() == 0);
 
   // k1 should widen up to PlusInfinity: [0, +inf]
-  REQUIRE(state["k1"].getLower().getConstant() == 0);
-  REQUIRE(state["k1"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["k1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k1"]).getUpper().isPlusInfinity());
 
   // kt without narrowing should evaluate alongside its source 'k1' up to
   // PlusInfinity: [0, +inf]
-  REQUIRE(state["kt"].getLower().getConstant() == 0);
-  REQUIRE(state["kt"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["kt"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["kt"]).getUpper().isPlusInfinity());
 
   // k2 follows 'kt' + 1: [1, +inf]
-  REQUIRE(state["k2"].getLower().getConstant() == 1);
-  REQUIRE(state["k2"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["k2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["k2"]).getUpper().isPlusInfinity());
 }
 
 TEST_CASE("Solver growthAnalysis widens a simple increasing loop",
@@ -92,18 +92,18 @@ TEST_CASE("Solver growthAnalysis widens a simple increasing loop",
   solver.growthAnalysis();
 
   // k0 remains constant.
-  REQUIRE(state["k0"].getKind() == AnalyzedValue::Kind::Set);
-  REQUIRE(state["k0"].getValues() == std::set<int>{0});
+  REQUIRE(std::get<IV>(state["k0"]).getKind() == IV::Kind::Set);
+  REQUIRE(std::get<IV>(state["k0"]).getValues() == std::set<int>{0});
 
   // k1 widens to [0,+inf].
-  REQUIRE(state["k1"].getKind() == AnalyzedValue::Kind::StridedInterval);
-  REQUIRE(state["k1"].getLower().getConstant() == 0);
-  REQUIRE(state["k1"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["k1"]).getKind() == IV::Kind::StridedInterval);
+  REQUIRE(std::get<IV>(state["k1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k1"]).getUpper().isPlusInfinity());
 
   // k2 = k1 + 1 = [1,+inf].
-  REQUIRE(state["k2"].getKind() == AnalyzedValue::Kind::StridedInterval);
-  REQUIRE(state["k2"].getLower().getConstant() == 1);
-  REQUIRE(state["k2"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["k2"]).getKind() == IV::Kind::StridedInterval);
+  REQUIRE(std::get<IV>(state["k2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["k2"]).getUpper().isPlusInfinity());
 }
 
 TEST_CASE("Solver narrowingAnalysis reclaims precision back down to the loop bound",
@@ -139,20 +139,20 @@ TEST_CASE("Solver narrowingAnalysis reclaims precision back down to the loop bou
   // 4. Verify that monotonic narrowing successfully refined the intervals
 
   // k0 remains exactly 0
-  REQUIRE(state["k0"].getLower().getConstant() == 0);
-  REQUIRE(state["k0"].getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getUpper().getConstant() == 0);
 
   // k1's upper bound should narrow down from +inf to 100 [0, 100]
-  REQUIRE(state["k1"].getLower().getConstant() == 0);
-  REQUIRE(state["k1"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["k1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k1"]).getUpper().getConstant() == 100);
 
   // kt remains safely clamped between [0, 99]
-  REQUIRE(state["kt"].getLower().getConstant() == 0);
-  REQUIRE(state["kt"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["kt"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["kt"]).getUpper().getConstant() == 99);
 
   // k2 settles at kt's upper bound + 1 [1, 100]
-  REQUIRE(state["k2"].getLower().getConstant() == 1);
-  REQUIRE(state["k2"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["k2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["k2"]).getUpper().getConstant() == 100);
 }
 
 TEST_CASE("Solver resolves future bounds during solve",
@@ -195,13 +195,13 @@ TEST_CASE("Solver resolves future bounds during solve",
 
   solver.resolveSCC();
 
-  REQUIRE(state["limit"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["limit"]).getUpper().getConstant() == 99);
 
-  REQUIRE(state["it"].getLower().getConstant() == 0);
-  REQUIRE(state["it"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["it"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["it"]).getUpper().getConstant() == 99);
 
-  REQUIRE(state["i2"].getLower().getConstant() == 1);
-  REQUIRE(state["i2"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["i2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["i2"]).getUpper().getConstant() == 100);
 }
 
 TEST_CASE("Solver handles mutually recursive future bounds",
@@ -270,11 +270,11 @@ TEST_CASE("Solver handles mutually recursive future bounds",
   solver.resolveSCC();
 
   // Initial values remain unchanged.
-  REQUIRE(state["i0"].getLower().getConstant() == 0);
-  REQUIRE(state["i0"].getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i0"]).getUpper().getConstant() == 0);
 
-  REQUIRE(state["j0"].getLower().getConstant() == 99);
-  REQUIRE(state["j0"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["j0"]).getLower().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["j0"]).getUpper().getConstant() == 99);
 
   // The two induction variables should remain finite after narrowing.
 
@@ -283,19 +283,19 @@ TEST_CASE("Solver handles mutually recursive future bounds",
 
 
   // Verify that the relational invariants induced by the futures hold.
-  REQUIRE(state["it"].getUpper().getConstant() <= state["j1"].getUpper().getConstant() - 1);
-  REQUIRE(state["jt"].getLower().getConstant() >= state["i1"].getLower().getConstant() + 1);
+  REQUIRE(std::get<IV>(state["it"]).getUpper().getConstant() <= std::get<IV>(state["j1"]).getUpper().getConstant() - 1);
+  REQUIRE(std::get<IV>(state["jt"]).getLower().getConstant() >= std::get<IV>(state["i1"]).getLower().getConstant() + 1);
 
   // The transfer functions must also hold.
-  REQUIRE(state["i2"].getLower().getConstant() ==
-          state["it"].getLower().getConstant() + 1);
-  REQUIRE(state["i2"].getUpper().getConstant() ==
-          state["it"].getUpper().getConstant() + 1);
+  REQUIRE(std::get<IV>(state["i2"]).getLower().getConstant() ==
+          std::get<IV>(state["it"]).getLower().getConstant() + 1);
+  REQUIRE(std::get<IV>(state["i2"]).getUpper().getConstant() ==
+          std::get<IV>(state["it"]).getUpper().getConstant() + 1);
 
-  REQUIRE(state["j2"].getLower().getConstant() ==
-          state["jt"].getLower().getConstant() - 1);
-  REQUIRE(state["j2"].getUpper().getConstant() ==
-          state["jt"].getUpper().getConstant() - 1);
+  REQUIRE(std::get<IV>(state["j2"]).getLower().getConstant() ==
+          std::get<IV>(state["jt"]).getLower().getConstant() - 1);
+  REQUIRE(std::get<IV>(state["j2"]).getUpper().getConstant() ==
+          std::get<IV>(state["jt"]).getUpper().getConstant() - 1);
 }
 
 TEST_CASE("Solver handles complete running example",
@@ -370,44 +370,44 @@ TEST_CASE("Solver handles complete running example",
 
   // Check values
 
-  REQUIRE(state["i0"].getLower().getConstant() == 0);
-  REQUIRE(state["i0"].getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i0"]).getUpper().getConstant() == 0);
 
-  REQUIRE(state["i1"].getLower().getConstant() == 0);
-  REQUIRE(state["i1"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["i1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i1"]).getUpper().isPlusInfinity());
 
-  REQUIRE(state["i2"].getLower().getConstant() == 1);
-  REQUIRE(state["i2"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["i2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["i2"]).getUpper().isPlusInfinity());
 
-  REQUIRE(state["it"].getLower().getConstant() == 0);
-  REQUIRE(state["it"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["it"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["it"]).getUpper().isPlusInfinity());
 
-  REQUIRE(state["j0"].getLower().getConstant() == 0);
-  REQUIRE(state["j0"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["j0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["j0"]).getUpper().getConstant() == 99);
 
-  REQUIRE(state["j1"].getLower().getConstant() == -1);
-  REQUIRE(state["j1"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["j1"]).getLower().getConstant() == -1);
+  REQUIRE(std::get<IV>(state["j1"]).getUpper().isPlusInfinity());
 
-  REQUIRE(state["j2"].getLower().getConstant() == -1);
-  REQUIRE(state["j2"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["j2"]).getLower().getConstant() == -1);
+  REQUIRE(std::get<IV>(state["j2"]).getUpper().isPlusInfinity());
 
-  REQUIRE(state["jt"].getLower().getConstant() == 0);
-  REQUIRE(state["jt"].getUpper().isPlusInfinity());
+  REQUIRE(std::get<IV>(state["jt"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["jt"]).getUpper().isPlusInfinity());
 
-  REQUIRE(state["k0"].getLower().getConstant() == 0);
-  REQUIRE(state["k0"].getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getUpper().getConstant() == 0);
 
-  REQUIRE(state["k1"].getLower().getConstant() == 0);
-  REQUIRE(state["k1"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["k1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k1"]).getUpper().getConstant() == 100);
 
-  REQUIRE(state["k2"].getLower().getConstant() == 1);
-  REQUIRE(state["k2"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["k2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["k2"]).getUpper().getConstant() == 100);
 
-  REQUIRE(state["kt"].getLower().getConstant() == 0);
-  REQUIRE(state["kt"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["kt"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["kt"]).getUpper().getConstant() == 99);
 
-  REQUIRE(state["kf"].getLower().getConstant() == 100);
-  REQUIRE(state["kf"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["kf"]).getLower().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["kf"]).getUpper().getConstant() == 100);
 }
 
 TEST_CASE("Solver and ConstraintGraph Integration: Complete Running Example",
@@ -487,34 +487,34 @@ TEST_CASE("Solver and ConstraintGraph Integration: Complete Running Example",
   // ==========================================
   // Verificação matemática
   // ==========================================
-  REQUIRE(state["i0"].getLower().getConstant() == 0);
-  REQUIRE(state["i0"].getUpper().getConstant() == 0);
-  REQUIRE(state["i1"].getLower().getConstant() == 0);
-  REQUIRE(state["i1"].getUpper().getConstant() == 99);
-  REQUIRE(state["i2"].getLower().getConstant() == 1);
-  REQUIRE(state["i2"].getUpper().getConstant() == 99);
-  REQUIRE(state["it"].getLower().getConstant() == 0);
-  REQUIRE(state["it"].getUpper().getConstant() == 98);
+  REQUIRE(std::get<IV>(state["i0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i0"]).getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["i1"]).getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["i2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["i2"]).getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["it"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["it"]).getUpper().getConstant() == 98);
 
-  REQUIRE(state["j0"].getLower().getConstant() == 0);
-  REQUIRE(state["j0"].getUpper().getConstant() == 99);
-  REQUIRE(state["j1"].getLower().getConstant() == -1);
-  REQUIRE(state["j1"].getUpper().getConstant() == 99);
-  REQUIRE(state["j2"].getLower().getConstant() == -1);
-  REQUIRE(state["j2"].getUpper().getConstant() == 98);
-  REQUIRE(state["jt"].getLower().getConstant() == 0);
-  REQUIRE(state["jt"].getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["j0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["j0"]).getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["j1"]).getLower().getConstant() == -1);
+  REQUIRE(std::get<IV>(state["j1"]).getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["j2"]).getLower().getConstant() == -1);
+  REQUIRE(std::get<IV>(state["j2"]).getUpper().getConstant() == 98);
+  REQUIRE(std::get<IV>(state["jt"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["jt"]).getUpper().getConstant() == 99);
 
-  REQUIRE(state["k0"].getLower().getConstant() == 0);
-  REQUIRE(state["k0"].getUpper().getConstant() == 0);
-  REQUIRE(state["k1"].getLower().getConstant() == 0);
-  REQUIRE(state["k1"].getUpper().getConstant() == 100);
-  REQUIRE(state["k2"].getLower().getConstant() == 1);
-  REQUIRE(state["k2"].getUpper().getConstant() == 100);
-  REQUIRE(state["kt"].getLower().getConstant() == 0);
-  REQUIRE(state["kt"].getUpper().getConstant() == 99);
-  REQUIRE(state["kf"].getLower().getConstant() == 100);
-  REQUIRE(state["kf"].getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["k0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k0"]).getUpper().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["k1"]).getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["k2"]).getLower().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["k2"]).getUpper().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["kt"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["kt"]).getUpper().getConstant() == 99);
+  REQUIRE(std::get<IV>(state["kf"]).getLower().getConstant() == 100);
+  REQUIRE(std::get<IV>(state["kf"]).getUpper().getConstant() == 100);
 }
 
 TEST_CASE("Solver and ConstraintGraph Integration: TooLong example",
@@ -548,8 +548,8 @@ TEST_CASE("Solver and ConstraintGraph Integration: TooLong example",
   // ==========================================
   // Verificação matemática
   // ==========================================
-  REQUIRE(state["tooLong_0"].getLower().getConstant() == 0);
-  REQUIRE(state["tooLong_0"].getUpper().getConstant() == 1);
-  REQUIRE(state["tooLong_1"].getLower().getConstant() == 0);
-  REQUIRE(state["tooLong_1"].getUpper().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["tooLong_0"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["tooLong_0"]).getUpper().getConstant() == 1);
+  REQUIRE(std::get<IV>(state["tooLong_1"]).getLower().getConstant() == 0);
+  REQUIRE(std::get<IV>(state["tooLong_1"]).getUpper().getConstant() == 1);
 }
